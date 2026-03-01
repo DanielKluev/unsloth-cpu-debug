@@ -51,7 +51,8 @@ class TestPackageImport:
 
     def test_version_string(self):
         import unsloth
-        assert unsloth.__version__ == "2026.2.1"
+        from unsloth._version import __version__
+        assert unsloth.__version__ == __version__
 
     def test_dataprep_available(self):
         import unsloth
@@ -118,7 +119,8 @@ class TestModelsStubs:
 
     def test_version(self):
         from unsloth.models import __version__
-        assert __version__ == "2026.2.1"
+        from unsloth._version import __version__ as expected_version
+        assert __version__ == expected_version
 
     def test_is_bfloat16_supported(self):
         from unsloth.models import is_bfloat16_supported

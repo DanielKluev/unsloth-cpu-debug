@@ -26,7 +26,10 @@ __all__ = [
 if IS_CPU_DEBUG:
     # CPU debug mode stubs - save/export functions require GPU
     def _cpu_save_stub(*args, **kwargs):
-        raise RuntimeError("Saving/exporting models requires a GPU and is not available in CPU debug mode.")
+        raise RuntimeError(
+            "Saving/exporting models requires a GPU and is not available in CPU debug mode.\n"
+            "Please run on a machine with GPU support."
+        )
 
     print_quantization_methods = _cpu_save_stub
     unsloth_save_model = _cpu_save_stub
@@ -55,7 +58,6 @@ if not IS_CPU_DEBUG:
     import sys
     import requests
     import torch
-    import os
     import shutil
     import pickle
     import gc
@@ -64,7 +66,6 @@ if not IS_CPU_DEBUG:
     import subprocess
     import psutil
     import re
-    from transformers.models.llama.modeling_llama import logger
     from .tokenizer_utils import fix_sentencepiece_gguf
     from .models.loader_utils import get_model_name
     from .models._utils import _convert_torchao_model

@@ -33,7 +33,7 @@ if not IS_CPU_DEBUG:
     from ._utils import is_bfloat16_supported, is_vLLM_available, __version__
     from .rl import PatchFastRL, vLLMSamplingParams
 else:
-    __version__ = "2026.2.1"
+    from .._version import __version__
 
     def is_bfloat16_supported():
         return False

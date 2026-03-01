@@ -317,7 +317,7 @@ if not IS_CPU_DEBUG:
     from .tokenizer_utils import *
     from .trainer import *
 else:
-    __version__ = "2026.2.1"
+    from ._version import __version__
 
 # Export dataprep utilities for CLI and downstream users
 from .dataprep.raw_text import RawTextDataLoader, TextPreprocessor
