@@ -118,8 +118,22 @@ else:
 
     _zoo_du = _load_zoo_dataset_utils()
     if _zoo_du is not None:
-        train_on_responses_only = _zoo_du.train_on_responses_only
-        standardize_data_formats = _zoo_du.standardize_data_formats
+        # Wrap zoo functions to force single-process execution in CPU debug
+        # mode to avoid multiprocessing issues (recursive spawns on Windows,
+        # fork-related errors on macOS/Linux).
+        import functools as _functools
+        _zoo_train_on_responses_only = _zoo_du.train_on_responses_only
+        _zoo_standardize_data_formats = _zoo_du.standardize_data_formats
+
+        @_functools.wraps(_zoo_train_on_responses_only)
+        def train_on_responses_only(*args, **kwargs):
+            kwargs["num_proc"] = 1
+            return _zoo_train_on_responses_only(*args, **kwargs)
+
+        @_functools.wraps(_zoo_standardize_data_formats)
+        def standardize_data_formats(*args, **kwargs):
+            kwargs["num_proc"] = 1
+            return _zoo_standardize_data_formats(*args, **kwargs)
     else:
         def train_on_responses_only(*args, **kwargs):
             raise RuntimeError(
