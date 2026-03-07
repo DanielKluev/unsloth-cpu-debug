@@ -20,12 +20,12 @@ __all__ = [
     "DEVICE_COUNT",
     "ALLOW_PREQUANTIZED_MODELS",
     "ALLOW_BITSANDBYTES",
+    "IS_CPU_DEBUG",
 ]
 
 import torch
 import functools
 import inspect
-from unsloth_zoo.utils import Version
 
 
 @functools.cache
@@ -43,23 +43,21 @@ def get_device_type():
         return "xpu"
     # Check torch.accelerator
     if hasattr(torch, "accelerator"):
-        if not torch.accelerator.is_available():
-            raise NotImplementedError(
-                "Unsloth cannot find any torch accelerator? You need a GPU."
-            )
-        accelerator = str(torch.accelerator.current_accelerator())
-        if accelerator in ("cuda", "xpu", "hip"):
-            raise RuntimeError(
-                f"Unsloth: Weirdly `torch.cuda.is_available()`, `torch.xpu.is_available()` and `is_hip` all failed.\n"
-                f"But `torch.accelerator.current_accelerator()` works with it being = `{accelerator}`\n"
-                f"Please reinstall torch - it's most likely broken :("
-            )
-    raise NotImplementedError(
-        "Unsloth currently only works on NVIDIA, AMD and Intel GPUs."
+        if torch.accelerator.is_available():
+            accelerator = str(torch.accelerator.current_accelerator())
+            if accelerator in ("cuda", "xpu", "hip"):
+                return accelerator
+    # CPU fallback for debug mode
+    print(
+        "Unsloth: No GPU detected - running in CPU debug mode.\n"
+        "Kernels, training and model loading are disabled.\n"
+        "Tokenizer loading and dataset masking will work normally."
     )
+    return "cpu"
 
 
 DEVICE_TYPE: str = get_device_type()
+IS_CPU_DEBUG: bool = DEVICE_TYPE == "cpu"
 # HIP fails for autocast and other torch functions. Use CUDA instead
 DEVICE_TYPE_TORCH = DEVICE_TYPE
 if DEVICE_TYPE_TORCH == "hip":
@@ -90,11 +88,13 @@ DEVICE_COUNT: int = get_device_count()
 # on Radeon GPUs, but not Instinct MI300x for eg [WIP]
 # See https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1748
 
-ALLOW_PREQUANTIZED_MODELS: bool = True
+ALLOW_PREQUANTIZED_MODELS: bool = not IS_CPU_DEBUG
 # HSA_STATUS_ERROR_EXCEPTION checks - sometimes AMD fails for BnB
-ALLOW_BITSANDBYTES: bool = True
+ALLOW_BITSANDBYTES: bool = not IS_CPU_DEBUG
 if DEVICE_TYPE == "hip":
     try:
+        from unsloth_zoo.utils import Version
+
         import bitsandbytes
     except:
         print(

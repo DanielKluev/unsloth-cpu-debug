@@ -546,7 +546,10 @@ def patch_trackio():
 
 def patch_datasets():
     # Datasets 4.4.0 and 4.4.1 weirdly have some weird `_thread.RLock_recursion_count` issues
-    if importlib.util.find_spec("datasets") is None:
+    try:
+        if importlib.util.find_spec("datasets") is None:
+            return
+    except (ValueError, ModuleNotFoundError):
         return
 
     datasets_version = Version(importlib_version("datasets"))

@@ -12,5 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .synthetic import *
+from ..device_type import IS_CPU_DEBUG
+
+if not IS_CPU_DEBUG:
+    from .synthetic import *
 from .raw_text import *

@@ -34,14 +34,118 @@ from .save import patch_saving_functions
 import os
 import shutil
 from .tokenizer_utils import *
-from .models._utils import patch_tokenizer
 import re
 from .ollama_template_mappers import OLLAMA_TEMPLATES
-from unsloth_zoo.dataset_utils import (
-    train_on_responses_only,
-    standardize_data_formats,
-)
-standardize_sharegpt = standardize_data_formats
+
+from .device_type import IS_CPU_DEBUG
+
+if not IS_CPU_DEBUG:
+    from .models._utils import patch_tokenizer
+    from unsloth_zoo.dataset_utils import (
+        train_on_responses_only,
+        standardize_data_formats,
+    )
+    standardize_sharegpt = standardize_data_formats
+else:
+    def patch_tokenizer(model, tokenizer):
+        return model, tokenizer
+
+    # Load dataset processing functions from unsloth_zoo even on CPU.
+    # These are pure data-processing functions with no GPU dependency, but
+    # unsloth_zoo.__init__ raises on CPU, so we load the submodule directly.
+    def _load_zoo_dataset_utils():
+        import sys, types, importlib.util
+        _zoo_spec = importlib.util.find_spec("unsloth_zoo")
+        if not _zoo_spec or not _zoo_spec.submodule_search_locations:
+            return None
+        _zoo_dir = list(_zoo_spec.submodule_search_locations)[0]
+        _du_path = os.path.join(_zoo_dir, "dataset_utils.py")
+        if not os.path.exists(_du_path):
+            return None
+
+        # Provide minimal package context so relative imports inside
+        # dataset_utils.py work (e.g. from .training_utils import ...).
+        _fake_zoo = types.ModuleType("unsloth_zoo")
+        _fake_zoo.__path__ = [_zoo_dir]
+        _fake_zoo.__package__ = "unsloth_zoo"
+
+        # Shim for training_utils.fix_zero_training_loss (diagnostic only)
+        _fake_training = types.ModuleType("unsloth_zoo.training_utils")
+        def _cpu_fix_zero_training_loss(model, tokenizer, train_dataset):
+            """CPU-compatible diagnostic: warn if all labels are -100."""
+            try:
+                from datasets import IterableDataset
+                if isinstance(train_dataset, IterableDataset):
+                    return
+            except Exception:
+                pass
+            if not hasattr(train_dataset, '__len__') or len(train_dataset) == 0:
+                return
+            row = train_dataset[0]
+            if isinstance(row, dict) and "labels" in row:
+                check = list(set(row["labels"]))
+                if len(check) == 1 and check[0] == -100:
+                    print(
+                        "Unsloth: Warning - all labels in first row are -100.\n"
+                        "Check your train_on_responses_only configuration."
+                    )
+        _fake_training.fix_zero_training_loss = _cpu_fix_zero_training_loss
+
+        # Register shims so relative imports resolve
+        _saved = {}
+        for key in ("unsloth_zoo", "unsloth_zoo.training_utils", "unsloth_zoo.dataset_utils"):
+            _saved[key] = sys.modules.get(key)
+        sys.modules["unsloth_zoo"] = _fake_zoo
+        sys.modules["unsloth_zoo.training_utils"] = _fake_training
+
+        try:
+            _du_spec = importlib.util.spec_from_file_location(
+                "unsloth_zoo.dataset_utils", _du_path,
+            )
+            _du_mod = importlib.util.module_from_spec(_du_spec)
+            _du_mod.__package__ = "unsloth_zoo"
+            sys.modules["unsloth_zoo.dataset_utils"] = _du_mod
+            _du_spec.loader.exec_module(_du_mod)
+            return _du_mod
+        except Exception:
+            # Restore on failure
+            for key, val in _saved.items():
+                if val is None:
+                    sys.modules.pop(key, None)
+                else:
+                    sys.modules[key] = val
+            return None
+
+    _zoo_du = _load_zoo_dataset_utils()
+    if _zoo_du is not None:
+        # Wrap zoo functions to force single-process execution in CPU debug
+        # mode to avoid multiprocessing issues (recursive spawns on Windows,
+        # fork-related errors on macOS/Linux).
+        import functools as _functools
+        _zoo_train_on_responses_only = _zoo_du.train_on_responses_only
+        _zoo_standardize_data_formats = _zoo_du.standardize_data_formats
+
+        @_functools.wraps(_zoo_train_on_responses_only)
+        def train_on_responses_only(*args, **kwargs):
+            kwargs["num_proc"] = 1
+            return _zoo_train_on_responses_only(*args, **kwargs)
+
+        @_functools.wraps(_zoo_standardize_data_formats)
+        def standardize_data_formats(*args, **kwargs):
+            kwargs["num_proc"] = 1
+            return _zoo_standardize_data_formats(*args, **kwargs)
+    else:
+        def train_on_responses_only(*args, **kwargs):
+            raise RuntimeError(
+                "Unsloth: `train_on_responses_only` requires `unsloth_zoo` package.\n"
+                "Install it with: pip install unsloth_zoo"
+            )
+        def standardize_data_formats(*args, **kwargs):
+            raise RuntimeError(
+                "Unsloth: `standardize_data_formats` requires `unsloth_zoo` package.\n"
+                "Install it with: pip install unsloth_zoo"
+            )
+    standardize_sharegpt = standardize_data_formats
 CHAT_TEMPLATES = {}
 DEFAULT_SYSTEM_MESSAGE = {}
 def _ollama_template(name: str):
