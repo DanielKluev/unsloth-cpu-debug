@@ -115,7 +115,6 @@ else:
                 else:
                     sys.modules[key] = val
             return None
-    pass
 
     _zoo_du = _load_zoo_dataset_utils()
     if _zoo_du is not None:
