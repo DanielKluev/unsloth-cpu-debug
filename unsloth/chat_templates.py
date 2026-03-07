@@ -34,14 +34,32 @@ from .save import patch_saving_functions
 import os
 import shutil
 from .tokenizer_utils import *
-from .models._utils import patch_tokenizer
 import re
 from .ollama_template_mappers import OLLAMA_TEMPLATES
-from unsloth_zoo.dataset_utils import (
-    train_on_responses_only,
-    standardize_data_formats,
-)
-standardize_sharegpt = standardize_data_formats
+
+from .device_type import IS_CPU_DEBUG
+
+if not IS_CPU_DEBUG:
+    from .models._utils import patch_tokenizer
+    from unsloth_zoo.dataset_utils import (
+        train_on_responses_only,
+        standardize_data_formats,
+    )
+    standardize_sharegpt = standardize_data_formats
+else:
+    def patch_tokenizer(model, tokenizer):
+        return model, tokenizer
+    def train_on_responses_only(*args, **kwargs):
+        raise RuntimeError(
+            "Unsloth: `train_on_responses_only` requires GPU dependencies.\n"
+            "Running in CPU debug mode."
+        )
+    def standardize_data_formats(*args, **kwargs):
+        raise RuntimeError(
+            "Unsloth: `standardize_data_formats` requires GPU dependencies.\n"
+            "Running in CPU debug mode."
+        )
+    standardize_sharegpt = standardize_data_formats
 CHAT_TEMPLATES = {}
 DEFAULT_SYSTEM_MESSAGE = {}
 def _ollama_template(name: str):

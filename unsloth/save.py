@@ -37,7 +37,7 @@ if IS_CPU_DEBUG:
     create_huggingface_repo = _cpu_save_stub
 
     def patch_saving_functions(model, vision = False):
-        pass
+        return model
 
 if not IS_CPU_DEBUG:
     from unsloth_zoo.utils import Version

@@ -48,26 +48,79 @@ else:
         "Model loading, training and saving require a GPU."
     )
 
+    class _CpuStubModel:
+        """Stub model returned by from_pretrained() in CPU debug mode."""
+        def __init__(self):
+            self.config = {}
+
+        def __repr__(self):
+            return "<CpuStubModel: GPU required for real model>"
+
     class _CpuModelStub:
         """Base stub for model classes in CPU debug mode."""
         @staticmethod
-        def from_pretrained(*args, **kwargs):
-            raise RuntimeError(_CPU_MSG.format("from_pretrained"))
+        def from_pretrained(
+            model_name = None,
+            max_seq_length = 2048,
+            dtype = None,
+            load_in_4bit = True,
+            load_in_8bit = False,
+            load_in_16bit = False,
+            full_finetuning = False,
+            token = None,
+            device_map = "sequential",
+            rope_scaling = None,
+            fix_tokenizer = True,
+            trust_remote_code = False,
+            use_gradient_checkpointing = "unsloth",
+            resize_model_vocab = None,
+            revision = None,
+            use_exact_model_name = False,
+            offload_embedding = False,
+            float32_mixed_precision = None,
+            fast_inference = False,
+            gpu_memory_utilization = 0.5,
+            float8_kv_cache = False,
+            random_state = 3407,
+            max_lora_rank = 64,
+            disable_log_stats = True,
+            qat_scheme = None,
+            load_in_fp8 = False,
+            unsloth_tiled_mlp = False,
+            *args,
+            **kwargs,
+        ):
+            from transformers import AutoTokenizer
+            print(
+                "Unsloth: Running in CPU debug mode.\n"
+                "Loading tokenizer only - model is a stub.\n"
+                "GPU is required for actual model loading."
+            )
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                token = token,
+                trust_remote_code = trust_remote_code,
+            )
+            return _CpuStubModel(), tokenizer
 
         @staticmethod
-        def get_peft_model(*args, **kwargs):
-            raise RuntimeError(_CPU_MSG.format("get_peft_model"))
+        def get_peft_model(model, *args, **kwargs):
+            print(
+                "Unsloth: CPU debug mode - get_peft_model is a no-op.\n"
+                "Returning stub model unchanged."
+            )
+            return model
 
         @staticmethod
         def pre_patch(*args, **kwargs):
             raise RuntimeError(_CPU_MSG.format("pre_patch"))
 
         @staticmethod
-        def for_training(*args, **kwargs):
+        def for_training(model = None, *args, **kwargs):
             raise RuntimeError(_CPU_MSG.format("for_training"))
 
         @staticmethod
-        def for_inference(*args, **kwargs):
+        def for_inference(model = None, *args, **kwargs):
             raise RuntimeError(_CPU_MSG.format("for_inference"))
 
     class FastLlamaModel(_CpuModelStub): pass

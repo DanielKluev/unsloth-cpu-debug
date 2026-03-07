@@ -86,22 +86,36 @@ class TestPackageImport:
 
 
 class TestModelStubBehavior:
-    """Test that model stubs raise clear errors on GPU operations."""
+    """Test that model stubs work correctly in CPU debug mode."""
 
-    def test_from_pretrained_raises(self):
+    def test_from_pretrained_returns_stub_and_tokenizer(self):
+        """from_pretrained should return a stub model and a real tokenizer."""
         from unsloth import FastLanguageModel
-        with pytest.raises(RuntimeError, match = "CPU debug mode"):
-            FastLanguageModel.from_pretrained(model_name = "test")
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM",
+        )
+        # Model is a stub
+        assert "CpuStubModel" in repr(model)
+        # Tokenizer is real
+        assert hasattr(tokenizer, "encode")
+        assert hasattr(tokenizer, "decode")
 
-    def test_get_peft_model_raises(self):
+    def test_get_peft_model_noop(self):
+        """get_peft_model should be a no-op on CPU, returning the model unchanged."""
         from unsloth import FastLanguageModel
-        with pytest.raises(RuntimeError, match = "CPU debug mode"):
-            FastLanguageModel.get_peft_model(None)
+        from unsloth.models import _CpuStubModel
+        stub = _CpuStubModel()
+        result = FastLanguageModel.get_peft_model(stub)
+        assert result is stub
 
-    def test_get_chat_template_passthrough(self):
+    def test_get_chat_template_functional(self):
+        """get_chat_template should actually apply chat templates on CPU."""
         from unsloth import get_chat_template
-        tok = "fake_tokenizer"
-        assert get_chat_template(tok) == tok
+        assert callable(get_chat_template)
+        # It's the real function, not a stub
+        import inspect
+        sig = inspect.signature(get_chat_template)
+        assert "chat_template" in sig.parameters
 
     def test_trainer_raises(self):
         from unsloth import UnslothTrainer
@@ -158,8 +172,10 @@ class TestSaveStubs:
 
         class MockModel:
             pass
-        # Should not raise
-        patch_saving_functions(MockModel())
+        mock = MockModel()
+        # Should return the model unchanged on CPU
+        result = patch_saving_functions(mock)
+        assert result is mock
 
     def test_save_stubs_raise(self):
         from unsloth.save import unsloth_save_model

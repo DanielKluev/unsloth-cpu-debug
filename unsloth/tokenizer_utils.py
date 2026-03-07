@@ -18,7 +18,6 @@ from transformers import PreTrainedTokenizerFast
 import re
 import os
 from transformers.models.llama.modeling_llama import logger
-from peft import PeftModelForCausalLM
 import torch
 import itertools
 import collections
@@ -27,14 +26,20 @@ import gc
 import subprocess
 import psutil
 
-from unsloth_zoo.tokenizer_utils import (
-    mean_of_trained_tokens,
-    add_new_tokens,
-    fix_untrained_tokens,
-)
-from unsloth_zoo.training_utils import (
-    fix_zero_training_loss,
-)
+from .device_type import IS_CPU_DEBUG
+
+if not IS_CPU_DEBUG:
+    from peft import PeftModelForCausalLM
+    from unsloth_zoo.tokenizer_utils import (
+        mean_of_trained_tokens,
+        add_new_tokens,
+        fix_untrained_tokens,
+    )
+    from unsloth_zoo.training_utils import (
+        fix_zero_training_loss,
+    )
+else:
+    def add_new_tokens(*args, **kwargs): pass
 
 __all__ = [
     "load_correct_tokenizer",
