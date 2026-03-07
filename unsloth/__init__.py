@@ -317,7 +317,68 @@ if not IS_CPU_DEBUG:
     from .tokenizer_utils import *
     from .trainer import *
 else:
-    from ._version import __version__
+    # CPU debug mode: export model stubs and version from .models
+    from .models import *
+    from .models import __version__
+    from .save import *
+
+    # Stubs for chat_templates exports
+    def get_chat_template(tokenizer, *args, **kwargs):
+        return tokenizer
+
+    def test_chat_templates(*args, **kwargs): pass
+    def test_hf_gguf_equivalence(*args, **kwargs): pass
+    def remove_special_tokens(*args, **kwargs): pass
+    def to_sharegpt(*args, **kwargs): pass
+    def standardize_sharegpt(*args, **kwargs): pass
+    def standardize_data_formats(*args, **kwargs): pass
+    def apply_chat_template(*args, **kwargs): pass
+    def test_construct_chat_template(*args, **kwargs): pass
+
+    def train_on_responses_only(*args, **kwargs):
+        raise RuntimeError(
+            "Unsloth: `train_on_responses_only` requires GPU dependencies.\n"
+            "Running in CPU debug mode."
+        )
+
+    # Stubs for tokenizer_utils exports
+    def load_correct_tokenizer(*args, **kwargs):
+        raise RuntimeError(
+            "Unsloth: `load_correct_tokenizer` requires GPU dependencies.\n"
+            "Use `transformers.AutoTokenizer.from_pretrained()` directly in CPU debug mode."
+        )
+
+    def fix_sentencepiece_tokenizer(*args, **kwargs): pass
+    def check_tokenizer(*args, **kwargs): pass
+    def add_new_tokens(*args, **kwargs): pass
+    def fix_sentencepiece_gguf(*args, **kwargs): pass
+
+    # Stubs for trainer exports
+    class UnslothTrainingArguments:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(
+                "Unsloth: `UnslothTrainingArguments` requires a GPU.\n"
+                "Running in CPU debug mode."
+            )
+
+    class UnslothTrainer:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(
+                "Unsloth: `UnslothTrainer` requires a GPU.\n"
+                "Running in CPU debug mode."
+            )
+
+    def unsloth_train(*args, **kwargs):
+        raise RuntimeError("Unsloth: Training requires a GPU. Running in CPU debug mode.")
+
+    def _patch_trl_trainer(): pass
+
+    class UnslothVisionDataCollator:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(
+                "Unsloth: `UnslothVisionDataCollator` requires a GPU.\n"
+                "Running in CPU debug mode."
+            )
 
 # Export dataprep utilities for CLI and downstream users
 from .dataprep.raw_text import RawTextDataLoader, TextPreprocessor

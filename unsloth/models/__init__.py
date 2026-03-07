@@ -40,3 +40,57 @@ else:
 
     def is_vLLM_available():
         return False
+
+    # CPU debug stubs for model classes - importable but raise on GPU operations
+    _CPU_MSG = (
+        "Unsloth: `{}` requires a GPU. Running in CPU debug mode.\n"
+        "Tokenizer loading, dataset preparation and chat templates work on CPU.\n"
+        "Model loading, training and saving require a GPU."
+    )
+
+    class _CpuModelStub:
+        """Base stub for model classes in CPU debug mode."""
+        @staticmethod
+        def from_pretrained(*args, **kwargs):
+            raise RuntimeError(_CPU_MSG.format("from_pretrained"))
+
+        @staticmethod
+        def get_peft_model(*args, **kwargs):
+            raise RuntimeError(_CPU_MSG.format("get_peft_model"))
+
+        @staticmethod
+        def pre_patch(*args, **kwargs):
+            raise RuntimeError(_CPU_MSG.format("pre_patch"))
+
+        @staticmethod
+        def for_training(*args, **kwargs):
+            raise RuntimeError(_CPU_MSG.format("for_training"))
+
+        @staticmethod
+        def for_inference(*args, **kwargs):
+            raise RuntimeError(_CPU_MSG.format("for_inference"))
+
+    class FastLlamaModel(_CpuModelStub): pass
+    class FastLanguageModel(_CpuModelStub): pass
+    class FastVisionModel(_CpuModelStub): pass
+    class FastTextModel(_CpuModelStub): pass
+    class FastModel(_CpuModelStub): pass
+    class FastMistralModel(_CpuModelStub): pass
+    class FastQwen2Model(_CpuModelStub): pass
+    class FastQwen3Model(_CpuModelStub): pass
+    class FastQwen3MoeModel(_CpuModelStub): pass
+    class FastGraniteModel(_CpuModelStub): pass
+    class FastSentenceTransformer(_CpuModelStub): pass
+    class FastFalconH1Model(_CpuModelStub): pass
+
+    def PatchDPOTrainer(*args, **kwargs):
+        raise RuntimeError(_CPU_MSG.format("PatchDPOTrainer"))
+
+    def PatchKTOTrainer(*args, **kwargs):
+        raise RuntimeError(_CPU_MSG.format("PatchKTOTrainer"))
+
+    class PatchFastRL:
+        pass
+
+    class vLLMSamplingParams:
+        pass

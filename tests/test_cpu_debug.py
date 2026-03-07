@@ -59,6 +59,59 @@ class TestPackageImport:
         assert hasattr(unsloth, "RawTextDataLoader")
         assert hasattr(unsloth, "TextPreprocessor")
 
+    def test_fast_language_model_importable(self):
+        from unsloth import FastLanguageModel
+        assert FastLanguageModel is not None
+
+    def test_fast_vision_model_importable(self):
+        from unsloth import FastVisionModel
+        assert FastVisionModel is not None
+
+    def test_fast_text_model_importable(self):
+        from unsloth import FastTextModel
+        assert FastTextModel is not None
+
+    def test_fast_model_importable(self):
+        from unsloth import FastModel
+        assert FastModel is not None
+
+    def test_chat_template_importable(self):
+        from unsloth import get_chat_template
+        assert callable(get_chat_template)
+
+    def test_trainer_importable(self):
+        from unsloth import UnslothTrainer, UnslothTrainingArguments
+        assert UnslothTrainer is not None
+        assert UnslothTrainingArguments is not None
+
+
+class TestModelStubBehavior:
+    """Test that model stubs raise clear errors on GPU operations."""
+
+    def test_from_pretrained_raises(self):
+        from unsloth import FastLanguageModel
+        with pytest.raises(RuntimeError, match = "CPU debug mode"):
+            FastLanguageModel.from_pretrained(model_name = "test")
+
+    def test_get_peft_model_raises(self):
+        from unsloth import FastLanguageModel
+        with pytest.raises(RuntimeError, match = "CPU debug mode"):
+            FastLanguageModel.get_peft_model(None)
+
+    def test_get_chat_template_passthrough(self):
+        from unsloth import get_chat_template
+        tok = "fake_tokenizer"
+        assert get_chat_template(tok) == tok
+
+    def test_trainer_raises(self):
+        from unsloth import UnslothTrainer
+        with pytest.raises(RuntimeError, match = "CPU debug mode"):
+            UnslothTrainer()
+
+    def test_train_on_responses_only_raises(self):
+        from unsloth import train_on_responses_only
+        with pytest.raises(RuntimeError, match = "CPU debug mode"):
+            train_on_responses_only()
 
 class TestKernelStubs:
     """Test that kernel stubs are properly provided on CPU."""
