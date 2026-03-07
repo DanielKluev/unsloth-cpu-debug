@@ -95,7 +95,7 @@ import functools
 import textwrap
 import logging
 import warnings, subprocess, inspect, psutil, os, math
-from unsloth_zoo.utils import Version, get_quant_type
+# from unsloth_zoo.utils import Version, get_quant_type
 from importlib.metadata import version as importlib_version
 from ..device_type import (
     is_hip,
@@ -106,6 +106,7 @@ from ..device_type import (
     ALLOW_PREQUANTIZED_MODELS,
 )
 from ..import_fixes import UNSLOTH_ENABLE_LOGGING
+"""
 from unsloth_zoo.log import logger
 from unsloth_zoo.tokenizer_utils import (
     patch_tokenizer as _patch_tokenizer,
@@ -151,7 +152,7 @@ from unsloth_zoo.compiler import (
 from unsloth_zoo.training_utils import (
     prepare_model_for_training,
 )
-
+"""
 
 def resolve_hip_gpu_stats_name(gpu_stats):
     name = str(getattr(gpu_stats, "name", "") or "").strip()
@@ -774,11 +775,6 @@ for model_name in model_architectures:
         config,
     )
 
-    # Just for Mistral Nemo
-    if model_name == "mistral":
-        if Version(transformers_version) <= Version("4.42.4"):
-            config = patch_mistral_nemo_config(config)
-
     exec(config, globals())
     exec(f"import {config_filepath}", globals())
     exec(f"{config_filepath}.{config_filename} = {config_filename}", globals())
@@ -1131,11 +1127,6 @@ def is_big_gpu(index) -> bool:
 import torch._inductor.utils
 
 torch._inductor.utils.is_big_gpu = is_big_gpu
-patch_torch_compile(
-    debug = UNSLOTH_COMPILE_DEBUG,
-    O3 = UNSLOTH_COMPILE_MAXIMUM,
-    ignore_errors = UNSLOTH_COMPILE_IGNORE_ERRORS,
-)
 
 torch_compile_options = {
     "epilogue_fusion": True,
@@ -1217,41 +1208,6 @@ def prepare_model_for_kbit_training(
     )
 
 
-# =============================================
-# Weirdly LoraLayer.update_layer downcasts PEFT layers to float16??
-# For mixed precision, we need it to be in float32 not float16.
-from peft import __version__ as peft_version
-from peft.utils.integrations import dequantize_module_weight
-
-if Version(peft_version) < Version("0.12.0"):
-    from peft.tuners.lora.layer import LoraLayer
-
-    try:
-        source = inspect.getsource(LoraLayer.update_layer)
-        text = "if weight is not None:\n"
-        start = source.find(text) + len(text)
-        end = source.find("self.to(weight.device)", start)
-        spaces = re.findall(r"^([ ]{1,})break", source, flags = re.MULTILINE)[0]
-        source = source.replace(source[start:end], spaces)
-        spaces = len(re.match(r"[\s]{1,}", source).group(0))
-        lines = source.split("\n")
-        source = "\n".join(x[spaces:] for x in lines)
-        source = re.sub(r"([^\.])nn\.", r"\1torch.nn.", source)
-        source = source.replace("def update_layer", "def LoraLayer_update_layer")
-        exec(source, globals())
-
-        # Fix up incorrect downcasting of LoRA weights
-        from peft.tuners.lora.layer import LoraLayer
-
-        LoraLayer.update_layer = LoraLayer_update_layer
-        from peft.tuners.lora import LoraLayer
-
-        LoraLayer.update_layer = LoraLayer_update_layer
-    except:
-        logger.warning_once(
-            "Unsloth unsuccessfully patched LoraLayer.update_layer. Please file a bug report.\n"
-            "Luckily, your training run will still work in the meantime!"
-        )
 
 # =============================================
 import importlib
@@ -1286,113 +1242,6 @@ def has_internet(host = "8.8.8.8", port = 53, timeout = 3):
 import psutil
 
 
-def _get_statistics(statistics = None, force_download = True):
-    # We log some basic stats about which environment is being used.
-    # We simply download a README.md file from HF - all data is made public.
-    # This is simply so we can check if some envs are broken or not.
-    # You can disable this by commenting the below out
-    n_cpus = psutil.cpu_count(logical = False)
-    keynames = "\n" + "\n".join(os.environ.keys())
-    # Check modelscope for down detection
-    global USE_MODELSCOPE
-    USE_MODELSCOPE = os.environ.get("UNSLOTH_USE_MODELSCOPE", "0") == "1"
-
-    if statistics is None:
-        # Prefer filesystem markers (harder to misidentify) before env-key matching
-        try:
-            from pathlib import Path
-
-            if Path("/kaggle/working").exists():
-                statistics = "kaggle"
-            elif Path("/content").exists() and Path("/opt/colab").exists():
-                statistics = "colab" if n_cpus == 1 else "colabpro"
-            elif Path("/runpod-volume").exists():
-                statistics = "runpod"
-        except Exception:
-            pass
-
-        # Fallback to env-key detection
-        if statistics is None:
-            if "\nKAGGLE_" in keynames:
-                statistics = "kaggle"
-            elif "\nCOLAB_" in keynames and n_cpus == 1:
-                statistics = "colab"
-            elif "\nCOLAB_" in keynames:
-                statistics = "colabpro"
-            elif "\nRUNPOD_" in keynames:
-                statistics = "runpod"
-            elif "\nAWS_" in keynames:
-                statistics = "aws"
-            elif "\nAZURE_" in keynames:
-                statistics = "azure"
-            # elif "\nK_" in keynames or "\nFUNCTION_" in keynames: statistics = "gcp"
-            elif "\nINVOCATION_ID" in keynames:
-                statistics = "lambda"
-            # else: statistics = "other"
-            else:
-
-                def try_vllm_check():
-                    vendor_files = (
-                        "/sys/class/dmi/id/product_version",
-                        "/sys/class/dmi/id/bios_vendor",
-                        "/sys/class/dmi/id/product_name",
-                        "/sys/class/dmi/id/chassis_asset_tag",
-                        "/sys/class/dmi/id/sys_vendor",
-                    )
-
-                    for vendor_file in vendor_files:
-                        path = Path(vendor_file)
-                        if path.is_file():
-                            file_content = path.read_text().lower()
-                            if "amazon" in file_content:
-                                return "aws"
-                            elif "microsoft corporation" in file_content:
-                                return "azure"
-                            elif "google" in file_content:
-                                return "gcp"
-                    return "other"
-
-                try:
-                    statistics = try_vllm_check()
-                except Exception:
-                    statistics = "other"
-
-    if statistics is not None:
-        import tempfile
-        from huggingface_hub import snapshot_download
-        from unsloth_zoo.rl_environments import execute_with_time_limit
-
-        if has_internet():
-
-            def stats_check():
-                with tempfile.TemporaryDirectory(ignore_cleanup_errors = True) as f:
-                    snapshot_download(
-                        f"unslothai/{statistics}",
-                        force_download = True,
-                        cache_dir = f,
-                        local_dir = f,
-                    )
-
-            time_limited_stats_check = execute_with_time_limit(120)(stats_check)
-            try:
-                time_limited_stats_check()
-            except TimeoutError:
-                raise TimeoutError(
-                    "Unsloth: HuggingFace seems to be down after trying for 120 seconds :(\n"
-                    "Check https://status.huggingface.co/ for more details.\n"
-                    "As a temporary measure, use modelscope with the same model name ie:\n"
-                    "```\n"
-                    "pip install modelscope\n"
-                    "import os; os.environ['UNSLOTH_USE_MODELSCOPE'] = '1'\n"
-                    "from unsloth import FastLanguageModel\n"
-                    "model = FastLanguageModel.from_pretrained('unsloth/gpt-oss-20b')\n"
-                    "```"
-                )
-            except Exception:
-                # Try no time limit check
-                stats_check()
-
-
 def get_statistics(local_files_only = False):
     # We log some basic stats about which environment is being used.
     # This is also to check if HuggingFace is down or not!
@@ -1418,8 +1267,6 @@ def get_statistics(local_files_only = False):
     if not are_progress_bars_disabled():
         disable_progress_bars()
         disabled = True
-    _get_statistics(None)
-    _get_statistics("repeat", force_download = False)
     total_memory = (
         torch.xpu.get_device_properties(0).total_memory
         if DEVICE_TYPE == "xpu"
