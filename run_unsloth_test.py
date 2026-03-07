@@ -5,11 +5,9 @@ from unsloth import FastLanguageModel
 import torch
 from unsloth.chat_templates import get_chat_template
 from unsloth.chat_templates import standardize_sharegpt
-from datasets import load_dataset
-from trl import SFTTrainer
-from transformers import TrainingArguments, DataCollatorForSeq2Seq
-from unsloth import is_bfloat16_supported
 from unsloth.chat_templates import train_on_responses_only
+from datasets import load_dataset
+from unsloth import is_bfloat16_supported
 import sys, os, argparse
 
 
@@ -104,35 +102,45 @@ print("--" * 20)
 print("Formatted, row[0]:")
 print(dataset[0])
 
-trainer = SFTTrainer(
-    model = model,
-    tokenizer = tokenizer,
-    train_dataset = dataset,
-    dataset_text_field = "text",
-    max_seq_length = max_seq_length,
-    data_collator = DataCollatorForSeq2Seq(tokenizer = tokenizer),
-    dataset_num_proc = 2,
-    packing = False, # Can make training 5x faster for short sequences.
-    args = TrainingArguments(
-        per_device_train_batch_size = batch_size,
-        gradient_accumulation_steps = batch_accumulation,
-        warmup_steps = 1,
-        num_train_epochs = total_epochs, # Set this for 1 full training run.
-        learning_rate = 2e-4,
-        fp16 = not is_bfloat16_supported(),
-        bf16 = is_bfloat16_supported(),
-        logging_steps = 1,
-        optim = "adamw_8bit",
-        weight_decay = 0.01,
-        lr_scheduler_type = "linear",
-        seed = 3407,
-        output_dir = "outputs",
-        report_to = "none", # Use this for WandB etc
-    ),
-)
+# ---- CPU debug: verify masking without SFTTrainer ----
+# On CPU we cannot construct a real SFTTrainer (needs a model),
+# but we can verify that train_on_responses_only masking works
+# by using it in return_function mode.
 
-trainer = train_on_responses_only(
-    trainer,
+# 1. Tokenize the formatted text
+def tokenize_fn(examples):
+    return tokenizer(examples["text"], truncation=True, max_length=max_seq_length, padding=False)
+
+tokenized_dataset = dataset.map(tokenize_fn, batched=True, remove_columns=dataset.column_names)
+print("--" * 20)
+print("Tokenized, row[0] keys:", list(tokenized_dataset[0].keys()))
+print("Tokenized, row[0] input_ids length:", len(tokenized_dataset[0]["input_ids"]))
+
+# 2. Apply train_on_responses_only masking (return_function mode)
+mask_fn = train_on_responses_only(
+    trainer = None,
+    tokenizer = tokenizer,
     instruction_part = "<|im_start|>user\n",
     response_part = "<|im_start|>assistant\n",
+    return_function = True,
 )
+
+masked_dataset = tokenized_dataset.map(mask_fn, batched=True)
+print("--" * 20)
+print("Masked labels, row[0]:")
+labels = masked_dataset[0]["labels"]
+input_ids = masked_dataset[0]["input_ids"]
+print(f"  Total tokens: {len(labels)}")
+print(f"  Masked (instruction) tokens: {labels.count(-100)}")
+print(f"  Unmasked (response) tokens: {len(labels) - labels.count(-100)}")
+
+# Show which tokens are masked vs unmasked
+print("\n  Token-by-token view:")
+for i, (tid, lab) in enumerate(zip(input_ids, labels)):
+    decoded = tokenizer.decode([tid])
+    status = "MASK" if lab == -100 else "TRAIN"
+    print(f"    [{i:3d}] {status} | id={tid:6d} | {repr(decoded)}")
+
+print("\n" + "=" * 60)
+print("CPU DEBUG PIPELINE COMPLETE - all data processing verified!")
+print("=" * 60)

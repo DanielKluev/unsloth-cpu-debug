@@ -122,10 +122,15 @@ class TestModelStubBehavior:
         with pytest.raises(RuntimeError, match = "CPU debug mode"):
             UnslothTrainer()
 
-    def test_train_on_responses_only_raises(self):
+    def test_train_on_responses_only_functional(self):
+        """train_on_responses_only is the real function on CPU, not a stub."""
         from unsloth import train_on_responses_only
-        with pytest.raises(RuntimeError, match = "CPU debug mode"):
-            train_on_responses_only()
+        assert callable(train_on_responses_only)
+        import inspect
+        sig = inspect.signature(train_on_responses_only)
+        assert "instruction_part" in sig.parameters
+        assert "response_part" in sig.parameters
+        assert "return_function" in sig.parameters
 
 class TestKernelStubs:
     """Test that kernel stubs are properly provided on CPU."""
